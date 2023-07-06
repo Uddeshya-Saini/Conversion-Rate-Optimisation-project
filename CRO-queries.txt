@@ -1,0 +1,216 @@
+-- QUERY 1
+-- Calculating the funnel for device_category and year
+-- Creating temporary tables to select the different columns
+-- The first table 'temp' is used to find out the number of Distinct sessions where event name is View Item
+WITH temp AS
+ (SELECT
+ EXTRACT(YEAR FROM date) AS year,
+ EXTRACT(MONTH FROM date) AS month,
+ device_category,
+ COUNT(DISTINCT session_id) AS ViewItem
+ FROM `prism-2023-c1.Prism_Main.funnelevents`
+ WHERE event_name = 'view_item'
+ GROUP BY 1,2,3
+),
+
+-- The second table 'temp2' is used to find out the number of Distinct sessions where event name is Purchase
+temp2 AS
+ (SELECT 
+ EXTRACT(YEAR FROM date) AS year,
+ EXTRACT(MONTH FROM date) AS month, 
+ device_category, 
+ COUNT(DISTINCT session_id) AS Transact 
+ FROM `prism-2023-c1.Prism_Main.funnelevents` 
+ WHERE event_name = 'purchase' 
+ GROUP BY 1,2,3
+),
+
+-- The third table 'temp3' is used to find out the number of Distinct sessions where event name is Add to Cart
+temp3 AS 
+ (SELECT 
+ EXTRACT(YEAR FROM date) AS year,
+ EXTRACT(MONTH FROM date) AS month, 
+ device_category, 
+ COUNT(DISTINCT session_id) AS AddToCart 
+ FROM `prism-2023-c1.Prism_Main.funnelevents` 
+ WHERE event_name = 'add_to_cart' 
+ GROUP BY 1,2,3
+),
+
+-- The fourth table 'temp4' is used to find out the number of Distinct sessions of Total visits to the website
+temp4 AS 
+ (SELECT 
+ EXTRACT(YEAR FROM date) AS year,
+ EXTRACT(MONTH FROM date) AS month, 
+ device_category, 
+ COUNT(DISTINCT session_id) AS TotalVisits 
+ FROM `prism-2023-c1.Prism_Main.sessions`
+ GROUP BY 1,2,3
+)
+
+-- Joining the 4 temporary tables together
+SELECT temp.*, temp2.Transact, temp3.AddToCart, temp4.TotalVisits
+FROM temp
+JOIN temp2
+  ON temp.year = temp2.year AND temp.device_category = temp2.device_category AND temp.month = temp2.month
+JOIN temp3
+  ON temp.year = temp3.year AND temp.device_category = temp3.device_category AND temp.month = temp3.month
+JOIN temp4
+  ON temp.year = temp4.year AND temp.device_category = temp4.device_category AND temp.month = temp4.month
+ORDER BY year, month;
+
+-- QUERY 2
+-- Calculating the funnel for Traffic source and year
+-- Creating temporary tables to find out the columns
+-- These tables also have a join between the funnelevents and sessions because the sessions table contains information on Traffic sources
+-- First table 'temp' is used to find out the number of Distinct sessions where event name is View Item
+WITH temp AS 
+ (SELECT 
+ EXTRACT(YEAR FROM funnels.date) AS year,
+ EXTRACT(MONTH FROM funnels.date) AS month,
+ sess.traffic_source,
+ sess.device_category,
+ COUNT(DISTINCT funnels.session_id) AS ViewItem
+ FROM `prism-2023-c1.Prism_Main.funnelevents` AS funnels
+ JOIN `prism-2023-c1.Prism_Main.sessions` AS sess
+ ON funnels.session_id = sess.session_id
+ WHERE funnels.event_name = 'view_item'
+ GROUP BY 1,2,3,4
+),
+
+-- Second table 'temp2' is used to find out the number of Distinct sessions where event name is Purchase
+temp2 AS 
+ (SELECT 
+ EXTRACT(YEAR FROM funnels.date) AS year,
+ EXTRACT(MONTH FROM funnels.date) AS month,
+ sess.traffic_source,
+ sess.device_category,
+ COUNT(DISTINCT funnels.session_id) AS Transact
+ FROM `prism-2023-c1.Prism_Main.funnelevents` AS funnels
+ JOIN `prism-2023-c1.Prism_Main.sessions` AS sess
+ ON funnels.session_id = sess.session_id 
+ WHERE event_name = 'purchase' 
+ GROUP BY 1,2,3,4
+),
+
+-- Third table 'temp3' is used to find out the number of Distinct sessions where event name is Add to Cart
+
+temp3 AS 
+ (SELECT 
+ EXTRACT(YEAR FROM funnels.date) AS year,
+ EXTRACT(YEAR FROM funnels.date) AS month,
+ sess.traffic_source,
+ sess.device_category,
+ COUNT(DISTINCT funnels.session_id) AS AddToCart 
+ FROM `prism-2023-c1.Prism_Main.funnelevents` AS funnels
+ JOIN `prism-2023-c1.Prism_Main.sessions` AS sess
+ ON funnels.session_id = sess.session_id
+ WHERE event_name = 'add_to_cart' 
+ GROUP BY 1,2,3,4
+),
+
+temp5 AS
+ (SELECT
+ EXTRACT(YEAR FROM sessions.date) AS year,
+ EXTRACT(MONTH FROM sessions.date) AS month,
+ traffic_source,
+ device_category,
+ SUM(transaction_revenue) AS revenue
+ FROM `prism-2023-c1.Prism_Main.sessions` AS sessions
+ JOIN `prism-2023-c1.Prism_Main.transactions` AS transact
+ ON sessions.session_id = transact.session_id
+ GROUP BY 1,2,3,4
+),
+
+-- Fourth table 'temp4' is used to find out the number of Distinct sessions for Total visits to the website
+-- No join needed here since all information is taken from sessions table
+temp4 AS 
+ (SELECT
+ EXTRACT(YEAR FROM date) AS year,
+ EXTRACT(MONTH FROM date) AS month,
+ traffic_source,
+ device_category,
+ COUNT(DISTINCT session_id) AS TotalVisits
+ FROM `prism-2023-c1.Prism_Main.sessions`
+ GROUP BY 1,2,3,4
+)
+
+-- Joining all 4 tables together to get the 4 columns
+SELECT temp.*, temp2.Transact, temp5.revenue, temp4.TotalVisits 
+FROM temp
+JOIN temp2
+  ON temp.year = temp2.year AND temp.month = temp2.month AND temp.traffic_source = temp2.traffic_source
+  AND temp.device_category = temp2.device_category
+
+JOIN temp3
+ ON temp.year = temp3.year AND temp.month = temp3.month AND temp.traffic_source = temp3.traffic_source
+ AND temp.device_category = temp3.device_category
+
+JOIN temp4
+ ON temp.year = temp4.year AND temp.month = temp4.month AND temp.traffic_source = temp4.traffic_source
+ AND temp.device_category = temp4.device_category
+JOIN temp5
+ ON temp.year = temp5.year AND temp.month = temp5.month AND temp.traffic_source = temp5.traffic_source
+AND temp.device_category = temp5.device_category;
+
+
+-- QUERY 3
+-- Finding out the Conversion Rate and revenue for traffic medium
+WITH temp1 AS 
+ (SELECT
+ EXTRACT(YEAR FROM date) AS year,
+ EXTRACT(MONTH FROM date) AS month,
+ traffic_medium,
+ COUNT(DISTINCT session_id) AS TotalVisits
+ FROM `prism-2023-c1.Prism_Main.sessions`
+ GROUP BY 1,2,3
+),
+
+temp2 AS 
+ (SELECT 
+ EXTRACT(YEAR FROM sessions.date) AS year,
+ EXTRACT(MONTH FROM sessions.date) AS month,
+ sessions.traffic_medium,
+ COUNT(DISTINCT funnels.session_id) AS Transact
+ FROM `prism-2023-c1.Prism_Main.sessions` AS sessions
+ JOIN `prism-2023-c1.Prism_Main.funnelevents` AS funnels
+ ON sessions.session_id = funnels.session_id
+ WHERE event_name = 'purchase'
+ GROUP BY 1,2,3
+),
+
+temp3 AS
+ (SELECT
+ EXTRACT(YEAR FROM sessions.date) AS year,
+ EXTRACT(MONTH FROM sessions.date) AS month,
+ sessions.traffic_medium,
+ SUM(transact.transaction_revenue) AS g_revenue
+ FROM `prism-2023-c1.Prism_Main.sessions` AS sessions
+ JOIN `prism-2023-c1.Prism_Main.transactions` AS transact
+ ON sessions.session_id = transact.session_id
+ GROUP BY 1,2,3
+ ORDER BY 1,2
+)
+
+SELECT temp1.year,
+ CASE 
+  WHEN temp1.month = 1 THEN 'January'
+  WHEN temp1.month = 2 THEN 'February'
+  WHEN temp1.month = 3 THEN 'March'
+  WHEN temp1.month = 4 THEN 'April'
+  WHEN temp1.month = 5 THEN 'May'
+  WHEN temp1.month = 6 THEN 'June'
+  WHEN temp1.month = 7 THEN 'July'
+  WHEN temp1.month = 8 THEN 'August'
+  WHEN temp1.month = 9 THEN 'September'
+  WHEN temp1.month = 10 THEN 'October'
+  WHEN temp1.month = 11 THEN 'November'
+  WHEN temp1.month = 12 THEN 'December'
+ END AS month,
+ temp1.traffic_medium, temp1.TotalVisits, temp2.Transact, temp3.g_revenue
+FROM temp1
+JOIN temp2
+ON temp1.year = temp2.year AND temp1.month = temp2.month AND temp1.traffic_medium = temp2.traffic_medium
+JOIN temp3
+ON temp1.year = temp3.year AND temp1.month = temp3.month AND temp1.traffic_medium = temp3.traffic_medium
+ORDER BY year;
